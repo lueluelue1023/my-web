@@ -2177,15 +2177,16 @@
                     'ml': 'ew-resize', 'mr': 'ew-resize', 'bl': 'nesw-resize',
                     'bm': 'ns-resize', 'br': 'nwse-resize', 'move': 'move'
                 };
-                cropCanvas.style.cursor = cursors[handle] || 'crosshair';
-            } else if (x >= Math.min(cropSelection.startX, cropSelection.endX) &&
+                if (handle) {
+                    cropCanvas.style.cursor = cursors[handle] || 'crosshair';
+                } else if (x >= Math.min(cropSelection.startX, cropSelection.endX) &&
                            x <= Math.max(cropSelection.startX, cropSelection.endX) &&
                            y >= Math.min(cropSelection.startY, cropSelection.endY) &&
                            y <= Math.max(cropSelection.startY, cropSelection.endY)) {
-                cropCanvas.style.cursor = 'move';
-            } else {
-                cropCanvas.style.cursor = 'crosshair';
-            }
+                    cropCanvas.style.cursor = 'move';
+                } else {
+                    cropCanvas.style.cursor = 'crosshair';
+                }
             });
 
             cropCanvas.addEventListener('mouseup', () => endSelection());
