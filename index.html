@@ -723,6 +723,14 @@
             font-size: 15px;
         }
 
+        .error-state {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 60px 20px;
+            color: #dc2626;
+            font-size: 15px;
+        }
+
         /* 大图预览模态框 */
         .preview-modal .modal-content {
             max-width: 700px;
@@ -1238,27 +1246,6 @@
     </div>
 
     <script>
-        // ========== 图片直链配置 ==========
-        // 按分类组织图片，支持多个分类
-        const imageCategories = [
-            {
-                name: "分类一",
-                images: [
-                    { url: "https://i.postimg.cc/cHJPxyJg/7af537feaaff4ed1f5ef178d7848cd93.jpg", title: "示例图片1" },
-                    { url: "https://i.imgur.com/7VkfQYj.jpg", title: "示例图片2" },
-                    { url: "https://i.imgur.com/9XqKb8N.jpg", title: "示例图片3" }
-                ]
-            },
-            {
-                name: "分类二",
-                images: [
-                    { url: "https://i.imgur.com/4QgQZbM.jpg", title: "示例图片4" },
-                    { url: "https://i.imgur.com/8ZbGyqL.jpg", title: "示例图片5" },
-                    { url: "https://i.imgur.com/2YdPpzR.jpg", title: "示例图片6" }
-                ]
-            }
-        ];
-
         // 获取DOM元素
         const imageUpload = document.getElementById('imageUpload');
         const fileInfo = document.getElementById('fileInfo');
@@ -1267,7 +1254,6 @@
         const canvasPlaceholder = document.getElementById('canvasPlaceholder');
         const canvasWrapper = document.getElementById('canvasWrapper');
         const exportBtn = document.getElementById('exportBtn');
-        const exportBtnMobile = document.getElementById('exportBtn');
         const cropBtn = document.getElementById('cropBtn');
 
         // 全局变量
@@ -1289,6 +1275,53 @@
             resizing: false,
             resizeHandle: null
         };
+
+        // ========== gallery.json 图库数据 ==========
+        let galleryData = null;
+        let imageList = [];
+        let currentCategory = null;
+
+        // 从 gallery.json 加载数据
+        async function loadGalleryData() {
+            if (galleryData !== null) {
+                return { success: true, data: galleryData };
+            }
+
+            try {
+                const response = await fetch('./gallery.json');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                galleryData = await response.json();
+
+                // 兼容两种格式：
+                // 1. { "images": [...] } 平级无分类
+                // 2. { "categories": [...] } 分分类
+                if (Array.isArray(galleryData.images)) {
+                    // 无分类，放到默认分类
+                    imageList = [{
+                        name: "全部",
+                        images: galleryData.images
+                    }];
+                } else if (Array.isArray(galleryData.categories)) {
+                    // 分分类格式
+                    imageList = galleryData.categories;
+                } else if (Array.isArray(galleryData)) {
+                    // 直接是数组
+                    imageList = [{
+                        name: "全部",
+                        images: galleryData
+                    }];
+                } else {
+                    imageList = [];
+                }
+
+                return { success: true, data: galleryData };
+            } catch (error) {
+                console.error('加载 gallery.json 失败:', error);
+                return { success: false, error: error.message };
+            }
+        }
 
         // 同步函数 - 桌面和移动端同步
         function syncToAllIds(cb) {
@@ -2139,21 +2172,20 @@
 
                 // 改变光标
                 const handle = getResizeHandle(x, y);
-                if (handle) {
-                    const cursors = {
-                        'tl': 'nwse-resize', 'tm': 'ns-resize', 'tr': 'nesw-resize',
-                        'ml': 'ew-resize', 'mr': 'ew-resize', 'bl': 'nesw-resize',
-                        'bm': 'ns-resize', 'br': 'nwse-resize', 'move': 'move'
-                    };
-                    cropCanvas.style.cursor = cursors[handle] || 'crosshair';
-                } else if (x >= Math.min(cropSelection.startX, cropSelection.endX) &&
+                const cursors = {
+                    'tl': 'nwse-resize', 'tm': 'ns-resize', 'tr': 'nesw-resize',
+                    'ml': 'ew-resize', 'mr': 'ew-resize', 'bl': 'nesw-resize',
+                    'bm': 'ns-resize', 'br': 'nwse-resize', 'move': 'move'
+                };
+                cropCanvas.style.cursor = cursors[handle] || 'crosshair';
+            } else if (x >= Math.min(cropSelection.startX, cropSelection.endX) &&
                            x <= Math.max(cropSelection.startX, cropSelection.endX) &&
                            y >= Math.min(cropSelection.startY, cropSelection.endY) &&
                            y <= Math.max(cropSelection.startY, cropSelection.endY)) {
-                    cropCanvas.style.cursor = 'move';
-                } else {
-                    cropCanvas.style.cursor = 'crosshair';
-                }
+                cropCanvas.style.cursor = 'move';
+            } else {
+                cropCanvas.style.cursor = 'crosshair';
+            }
             });
 
             cropCanvas.addEventListener('mouseup', () => endSelection());
@@ -2200,14 +2232,26 @@
         // 当前状态
         let selectedImage = null;
         let selectedImageUrl = null;
-        let currentCategory = null;
 
         // 打开图库
-        openGalleryBtn.addEventListener('click', () => {
+        openGalleryBtn.addEventListener('click', async () => {
             galleryModal.classList.add('show');
+
+            // 如果数据为空，先加载
+            if (imageList.length === 0) {
+                imageGrid.innerHTML = '<div class="empty-state">加载中...</div>';
+                const result = await loadGalleryData();
+                if (!result.success) {
+                    imageGrid.innerHTML = `<div class="error-state">加载图库失败: ${result.error}</div>`;
+                    return;
+                }
+            }
+
             renderCategoryTabs();
-            if (imageCategories.length > 0) {
-                loadCategory(imageCategories[0].name);
+            if (imageList.length > 0) {
+                loadCategory(imageList[0].name);
+            } else {
+                renderImageGrid([]);
             }
         });
 
@@ -2215,7 +2259,12 @@
         function renderCategoryTabs() {
             const container = document.getElementById('categoryTabs');
             container.innerHTML = '';
-            imageCategories.forEach((cat, index) => {
+            if (imageList.length <= 1) {
+                container.style.display = 'none';
+                return;
+            }
+            container.style.display = 'flex';
+            imageList.forEach((cat, index) => {
                 const tab = document.createElement('button');
                 tab.className = 'category-tab' + (index === 0 ? ' active' : '');
                 tab.textContent = cat.name;
@@ -2231,7 +2280,7 @@
         // 加载分类图片
         function loadCategory(categoryName) {
             currentCategory = categoryName;
-            const category = imageCategories.find(c => c.name === categoryName);
+            const category = imageList.find(c => c.name === categoryName);
             renderImageGrid(category ? category.images : []);
         }
 
@@ -2263,7 +2312,7 @@
         // 渲染图片网格
         function renderImageGrid(images) {
             if (!images || images.length === 0) {
-                imageGrid.innerHTML = '<div class="empty-state">该分类暂无图片</div>';
+                imageGrid.innerHTML = '<div class="empty-state">暂无图片</div>';
                 return;
             }
 
